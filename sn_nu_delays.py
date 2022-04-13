@@ -2,7 +2,6 @@
 from astropy.coordinates import SkyCoord
 import astropy.units as u
 from astropy.time import Time
-import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
 import plotly
@@ -11,6 +10,7 @@ import chart_studio.plotly as py
 import plotly.graph_objs as go
 import plotly.express as px
 from plotly.offline import iplot
+from dash import Dash, dcc, html, Input, Output
 
 def get_xyz_from_gcrs(gcrs_coor, radius=10, scale_rad=1):
     """ radius in kpc
@@ -146,8 +146,8 @@ def generate_table(dataframe, max_rows=20):
 
 kv_pairs = [{"label":name, "value":val} for val, name in enumerate(candid_stars)]
 vk_pairs = {val:name for val, name in enumerate(candid_stars)}
-from dash import Dash, dcc, html, Input, Output
 
+### Make a dashboard
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
@@ -166,7 +166,8 @@ app.layout = html.Div([
     ),
 
     html.Div(children=[
-                html.Div([html.H4(children='Delays'), html.Table(id='delay_df')],
+                html.Div([html.H4(children='Delays'), html.Table(id='delay_df',
+                                                                 style={"font-weight": "bold", "color":"white"})],
                          )],
         style={'display': 'inline-block', 'vertical-align': 'top', 'margin-left': '3vw', 'margin-top': '3vw'}
     ),
