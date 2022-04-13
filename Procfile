@@ -1,1 +1,1 @@
-web:gunicorn sn_nu_delays:server
+web: gunicorn sn_nu_delays:server
