@@ -8,23 +8,18 @@ from datetime import date
 
 import numpy as np
 import pandas as pd
-import plotly
-import plotly.tools as tls
-import chart_studio.plotly as py
 import plotly.graph_objs as go
-import plotly.express as px
-from plotly.offline import iplot
+
 from dash import Dash, dcc, html, Input, Output
 
 EarthRadius = 6.3781e6 # in units m
 Earthradkpc = EarthRadius*u.m.to(u.kpc)
 
-radius = EarthRadius # in units m
+# radius = EarthRadius # in units m
 uu, vv = np.mgrid[0:2*np.pi:200j, 0:np.pi:100j]
-xE = radius * np.cos(uu)*np.sin(vv)
-yE = radius * np.sin(uu)*np.sin(vv)
-zE = radius * np.cos(vv)
-
+xE = EarthRadius * np.cos(uu)*np.sin(vv)
+yE = EarthRadius * np.sin(uu)*np.sin(vv)
+zE = EarthRadius * np.cos(vv)
 
 # class from SNEWPDAG
 class Detector:
@@ -69,16 +64,18 @@ def append_at_obs(timestring, dataframe):
     dataframe['x (m)'] = -999
     dataframe['y (m)'] = -999
     dataframe['z (m)'] = -999
-    detobjects = {}
-    for name in detectors.index:
-        detector = detectors.loc[name]
-        detector_obj = Detector(name=name, lon=detector['Longitude (deg)'], lat=detector['Latitude (deg)'],
-                                height=detector['Height (m)'], sigma=detector['Time Uncertainty (s)'],
+    for _name in detectors_df.index:
+        detector = detectors_df.loc[_name]
+        detector_obj = Detector(name=_name,
+                                lon=detector['Longitude (deg)'],
+                                lat=detector['Latitude (deg)'],
+                                height=detector['Height (m)'],
+                                sigma=detector['Time Uncertainty (s)'],
                                 bias=detector['Bias (s)'])
         x, y, z = detector_obj.get_xyz(ObsTime)
-        detectors.loc[name, 'x (m)'] = x.value
-        detectors.loc[name, 'y (m)'] = y.value
-        detectors.loc[name, 'z (m)'] = z.value
+        detectors_df.loc[_name, 'x (m)'] = x.value
+        detectors_df.loc[_name, 'y (m)'] = y.value
+        detectors_df.loc[_name, 'z (m)'] = z.value
 
 
 def get_xyz_from_gcrs(gcrs_coor, radius=10, scale_rad=1):
@@ -93,19 +90,20 @@ def get_xyz_from_gcrs(gcrs_coor, radius=10, scale_rad=1):
     SNz = -np.sin(delta)
     return radius * np.array([SNx, SNy, SNz])
 
-stars_radec = np.loadtxt('./assets/star_candidates.txt', usecols=(1, 2), delimiter=',')
+#------------------------------------------------ load assets ----------------------------------------------------------
+stars_radec_list = np.loadtxt('./assets/star_candidates.txt', usecols=(1, 2), delimiter=',')
 candid_names = np.loadtxt('./assets/star_candidates.txt', usecols=0, delimiter=',', dtype=str)
-star_names = []
-for name in candid_names:
-    stripped_name = name.strip()
-    if stripped_name not in star_names:
-        star_names.append(stripped_name)
+star_names_list = []
+for _name in candid_names:
+    stripped_name = _name.strip()
+    if stripped_name not in star_names_list:
+        star_names_list.append(stripped_name)
     else:
-        star_names.append(stripped_name + "-2")
+        star_names_list.append(stripped_name + "-2")
 
-detectors = pd.read_csv('./assets/detector_locations.csv', index_col='Unnamed: 0')
+detectors_df = pd.read_csv('./assets/detector_locations.csv', index_col='Unnamed: 0')
 
-def get_detectors_at_time(obstime_str="2022-06-14 20:00:00.100", detectors=detectors):
+def get_detectors_at_time(obstime_str="2022-06-14 20:00:00.100", detectors=detectors_df):
     obstime = Time(obstime_str, format='iso', scale='utc')
     df_new = detectors.copy()
     df_new['ObsTime'] = np.repeat(obstime, len(detectors))
@@ -119,10 +117,10 @@ def get_detectors_at_time(obstime_str="2022-06-14 20:00:00.100", detectors=detec
         df_new.loc[name, 'x (m)'], df_new.loc[name, 'y (m)'], df_new.loc[name, 'z (m)'] = detobj.get_xyz(obstime).value
     return df_new
 
-random_radii = np.random.uniform(low=1.5, high=12, size=len(star_names))
-
-def get_stars_at_time(obstime_str="2022-06-14 20:00:00.100", stars_radec=stars_radec,
-                      radii='random', star_names=star_names):
+def get_stars_at_time(obstime_str="2022-06-14 20:00:00.100", stars_radec=stars_radec_list,
+                      radii='random', star_names=star_names_list):
+    assert len(star_names_list) == len(stars_radec), "length of Names and Coordinates don't match!"
+    random_radii = np.random.uniform(low=1.5, high=12, size=len(star_names))
     ra = stars_radec[:, 0]
     dec = stars_radec[:, 1]
     obstime = Time(obstime_str, format='iso', scale='utc')
@@ -139,14 +137,13 @@ def get_stars_at_time(obstime_str="2022-06-14 20:00:00.100", stars_radec=stars_r
 
 
 def get_delays_for_time(obstime_str="2022-06-14 20:00:00.100",
-                        detectors=detectors,
-                        stars_radec=stars_radec):
+                        detectors=detectors_df,
+                        stars_radec=stars_radec_list):
     """ For a given time, return detector delays
-        to all stars, as a dictionary
-        dictionary contains; my_dict[star_name] => delays
+        to all stars, as a dictionary contains; my_dict[star_name] => delays
     """
 
-    stars_df = get_stars_at_time(obstime_str=obstime_str, stars_radec=stars_radec, star_names=star_names)
+    stars_df = get_stars_at_time(obstime_str=obstime_str, stars_radec=stars_radec, star_names=star_names_list)
     detectors_df = get_detectors_at_time(obstime_str="2022-06-14 20:00:00.100", detectors=detectors)
     #     sn_candidate = stars_df.loc[star_name]
 
@@ -169,10 +166,12 @@ def get_delays_for_time(obstime_str="2022-06-14 20:00:00.100",
 def get_delays_for_star(star_name,
                         delays_dict=None,
                         obstime_str="2022-06-14 20:00:00.100",
-                        detectors=detectors,
-                        stars_radec=stars_radec):
+                        detectors=detectors_df,
+                        stars_radec=stars_radec_list):
     if delays_dict is None:
-        delays_dict = get_delays_for_time(obstime_str=obstime_str, detectors=detectors, stars_radec=stars_radec)
+        delays_dict = get_delays_for_time(obstime_str=obstime_str,
+                                          detectors=detectors,
+                                          stars_radec=stars_radec)
         star_df = delays_dict[star_name]
     else:
         star_df = delays_dict[star_name]
@@ -222,8 +221,10 @@ layout = go.Layout(
 
 )
 
-detector_text =[name + f"<br>lon: {detectors.loc[name, 'Longitude (deg)']:.2f}deg<br>lat: {detectors.loc[name, 'Latitude (deg)']:.2f}deg<br>Height{detectors.loc[name, 'Height (m)']:.2f}m" for name in detectors.index]
-star_text = [name + f"<br>RA:{ra:.2f}" + f"<br>DEC:{dec:.2f}" for name, ra, dec in zip(star_names, stars_radec[:,0], stars_radec[:,1])]
+detector_text =[name + f"<br>lon: {detectors_df.loc[name, 'Longitude (deg)']:.2f}deg<br>lat: " \
+                       f"{detectors_df.loc[name, 'Latitude (deg)']:.2f}deg<br>" \
+                       f"Height{detectors_df.loc[name, 'Height (m)']:.2f}m" for name in detectors_df.index]
+star_text = [name + f"<br>RA:{ra:.2f}" + f"<br>DEC:{dec:.2f}" for name, ra, dec in zip(star_names_list, stars_radec_list[:, 0], stars_radec_list[:, 1])]
 
 def get_scatter_data(obstime):
     """ for a given time, get all the scatter data
@@ -244,7 +245,8 @@ def plot_spheres(obstime, candid_name=None):
         stars = get_stars_at_time(obstime_str=obstime)
         candid = stars.loc[candid_name]
         modified_part =[go.Scatter3d(x=[candid['x (m)']], y=[candid['y (m)']], z=[candid['z (m)']],
-                                     mode='markers', hoverinfo='text', marker=dict(size=35, color='yellow', opacity=0.4),
+                                     mode='markers', hoverinfo='text',
+                                     marker=dict(size=35, color='yellow', opacity=0.4),
                                      text=f"{candid_name} <br> EXPLODED!")]
         data = lines + data + modified_part
     fig = go.Figure(data=data, layout=layout)
@@ -263,8 +265,8 @@ def generate_table(dataframe, max_rows=20):
     ])
 
 
-kv_pairs = [{"label":name, "value":val} for val, name in enumerate(star_names)]
-vk_pairs = {val:name for val, name in enumerate(star_names)}
+kv_pairs = [{"label":name, "value":val} for val, name in enumerate(star_names_list)]
+vk_pairs = {val:name for val, name in enumerate(star_names_list)}
 
 ### Make a dashboard
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
@@ -313,15 +315,10 @@ app.layout = html.Div([
 )
 def update_graph(obstime, candid_selected):
     print(candid_selected)
-    print(type(candid_selected))
     star_name = vk_pairs[candid_selected]
-
-    # print(f">>> |{name}|")
-    # print(f"obstime {obstime}")
     if obstime is not None:
         date_object = date.fromisoformat(obstime)
         date_string = date_object.strftime('%Y-%m-%d')+" 20:00:00.100"
-        # print("---->", date_string)
     else:
         date_string = "2022-06-14 20:00:00.100"
     all_delays = get_delays_for_time(obstime_str=date_string)
