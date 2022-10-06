@@ -2,6 +2,7 @@
 
 ## some notes to self, needs to be cleaned
 
+Updated to automatically deploy at
 http://supernova-neutrinos.herokuapp.com/
 
 https://git.heroku.com/supernova-neutrinos.git
