@@ -218,10 +218,11 @@ def plot_spheres(obstime, candid_name=None):
     if candid_name is not None:
         stars = get_stars_at_time(obstime_str=obstime)
         candid = stars.loc[candid_name]
+        radec = f"RA:{candid['RA (deg)']}, DEC:{candid['DEC (deg)']}"
         modified_part =[go.Scatter3d(x=[candid['x (m)']], y=[candid['y (m)']], z=[candid['z (m)']],
                                      mode='markers', hoverinfo='text',
                                      marker=dict(size=35, color='yellow', opacity=0.4),
-                                     text=f"{candid_name} <br> EXPLODED!")]
+                                     text=f"{candid_name} <br>{radec}<br> EXPLODED!")]
         data = lines + data + modified_part
     fig = go.Figure(data=data, layout=layout)
     return fig
@@ -239,6 +240,7 @@ def generate_table(dataframe, max_rows=20):
     ])
 
 
+star_names_list = sorted(star_names_list)
 kv_pairs = [{"label":name, "value":val} for val, name in enumerate(star_names_list)]
 vk_pairs = {val:name for val, name in enumerate(star_names_list)}
 
@@ -246,6 +248,12 @@ vk_pairs = {val:name for val, name in enumerate(star_names_list)}
 external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
+
+explanation_text = [f"The app calculates the relative time delays between detectors", html.Br(),
+                    f"Therefore, the radial distance of a candidate star is randomly distributed", html.Br(),
+                    f"The plane wave from a star is brought to earth surface, and all delays are referenced", html.Br(),
+                    f"from the first detector interaction.", html.Br(),
+                    "see the code at https://github.com/KaraMelih/supernova-triangulation"]
 
 app.layout = html.Div([
     html.Div(
@@ -256,7 +264,8 @@ app.layout = html.Div([
             dcc.DatePickerSingle(id='my-date-picker-single', min_date_allowed=date(2022, 4, 14),
                                  max_date_allowed=date(2030, 12, 12), initial_visible_month=date(2022, 6, 14),
                                  date=date(2022, 6, 14)),
-            html.Div(id='output-container-date-picker-single')
+            html.Div(id='output-container-date-picker-single'),
+            html.H1(explanation_text, style={'color':'white', 'font_size': '6px'})
         ],
         style={'display': 'inline-block', 'width': "30%", 'vertical-align': 'top', 'margin-left': '3vw',
                'margin-top': '3vw'}
@@ -288,8 +297,8 @@ app.layout = html.Div([
      Input(component_id='candid_selected', component_property='value')]
 )
 def update_graph(obstime, candid_selected):
-    print(candid_selected)
     star_name = vk_pairs[candid_selected]
+    print(candid_selected, star_name)
     if obstime is not None:
         date_object = date.fromisoformat(obstime)
         date_string = date_object.strftime('%Y-%m-%d')+" 20:00:00.100"
