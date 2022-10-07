@@ -157,7 +157,10 @@ for i, j, k in zip(xE, yE, zE):
     lines.append(go.Scatter3d(x=i, y=j, z=k, mode='lines', line=line_marker, hoverinfo='none'))
 
 layout = go.Layout(
-    title='SN Detectors & Candidate Stars',
+    title=dict(text ='SN Detectors & Candidate Stars',
+               font =dict(family='Sherif',
+               size=14,
+               color = 'cyan')),
     width=800,
     height=800,
     paper_bgcolor='rgba(0,0,0,1)',
@@ -249,23 +252,23 @@ external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
 
-explanation_text = [f"The app calculates the relative time delays between detectors", html.Br(),
-                    f"Therefore, the radial distance of a candidate star is randomly distributed", html.Br(),
-                    f"The plane wave from a star is brought to earth surface, and all delays are referenced", html.Br(),
-                    f"from the first detector interaction.", html.Br(),
-                    "see the code at https://github.com/KaraMelih/supernova-triangulation"]
+explanation_text =  f"\n\nThe app calculates the relative time delays between detectors \n" \
+                    f"Therefore, the radial distance of a candidate star is randomly distributed \n" \
+                    f"The plane wave from a star is brought to earth surface, and all delays are referenced\n" \
+                    f"from the first detector interaction.\n" \
+                    "see the code at [GitHub](https://github.com/KaraMelih/supernova-triangulation)"
 
 app.layout = html.Div([
     html.Div(
         children=[
-            html.H1("Supernova Arrival Time Delays", style={'text-align': 'center'}),
+            html.H1("Supernova Arrival Time Delays", style={'text-align': 'center', 'color':'white'}),
             dcc.Dropdown(id="candid_selected", options=kv_pairs, multi=False, value=123,
                          placeholder="Select a Star to Explode", style={'width': "90%"}),
             dcc.DatePickerSingle(id='my-date-picker-single', min_date_allowed=date(2022, 4, 14),
                                  max_date_allowed=date(2030, 12, 12), initial_visible_month=date(2022, 6, 14),
                                  date=date(2022, 6, 14)),
             html.Div(id='output-container-date-picker-single'),
-            html.H1(explanation_text, style={'color':'white', 'font_size': '6px'})
+            dcc.Markdown(children=explanation_text, style={'color':'white', 'font_size': '6px'}),
         ],
         style={'display': 'inline-block', 'width': "30%", 'vertical-align': 'top', 'margin-left': '3vw',
                'margin-top': '3vw'}
@@ -273,7 +276,7 @@ app.layout = html.Div([
 
     html.Div(
         children=[
-            html.Div([html.H4(children='Delays'),
+            html.Div([html.H4(children='Delays in sec', style={'color':'white'}),
                       html.Table(id='delay_df', style={"font-weight": "bold", "color": "white"})])
         ],
         style={'display': 'inline-block', 'vertical-align': 'top', 'margin-left': '3vw', 'margin-top': '3vw'}
