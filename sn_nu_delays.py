@@ -4,7 +4,7 @@ import astropy.units as u
 from astropy.time import Time
 from astropy.coordinates import EarthLocation
 from astropy.coordinates import SkyCoord
-from datetime import date
+from datetime import date, datetime, timedelta
 
 import numpy as np
 import pandas as pd
@@ -14,6 +14,7 @@ from dash import Dash, dcc, html, Input, Output
 
 EarthRadius = 6.3781e6 # in units m
 Earthradkpc = EarthRadius*u.m.to(u.kpc)
+isoformat = "%Y-%m-%dT%H:%M:%S.%f"
 
 # radius = EarthRadius # in units m
 uu, vv = np.mgrid[0:2*np.pi:200j, 0:np.pi:100j]
@@ -39,7 +40,7 @@ class Detector:
 
     def get_gcrs(self, obstime):
         # k = EarthLocation.of_site('keck')
-        t = Time(obstime)  # make sure it's in astropy Time form
+        t = Time(obstime, format='isot')  # make sure it's in astropy Time form
         g = self.loc.get_gcrs(obstime=t)  # g.ra and g.dec
         return g
 
@@ -88,8 +89,9 @@ stars_df = pd.DataFrame(_stars, columns=('Star Name', 'RA', 'DEC', 'Rand. Dist')
 stars_df = stars_df.astype({"RA": float, "DEC": float, 'Rand. Dist':float})
 #-----------------------------------------------------------------------------------------------------------------------
 
-def get_detectors_at_time(obstime_str="2022-06-14 20:00:00.100", detectors=detectors_df):
-    obstime = Time(obstime_str, format='iso', scale='utc')
+def get_detectors_at_time(obstime_str="2023-06-14T12:00:00.000000", detectors=detectors_df):
+    # obstime = Time(obstime_str, format='iso', scale='utc')
+    obstime = Time(obstime_str, format='isot', scale='utc')
     df_new = detectors.copy()
     df_new['ObsTime'] = np.repeat(obstime, len(detectors))
     df_new['x (m)'], df_new['y (m)'], df_new['z (m)'] = 0, 0, 0
@@ -102,8 +104,9 @@ def get_detectors_at_time(obstime_str="2022-06-14 20:00:00.100", detectors=detec
         df_new.loc[name, 'x (m)'], df_new.loc[name, 'y (m)'], df_new.loc[name, 'z (m)'] = detobj.get_xyz(obstime).value
     return df_new
 
-def get_stars_at_time(obstime_str="2022-06-14 20:00:00.100"):
-    obstime = Time(obstime_str, format='iso', scale='utc')
+def get_stars_at_time(obstime_str="2023-06-14T12:00:00.000000"):
+    # obstime = Time(obstime_str, format='iso', scale='utc')
+    obstime = Time(obstime_str, format='isot', scale='utc')
     skycoors = SkyCoord(stars_df['RA'], stars_df['DEC'], frame="fk5", obstime=obstime, unit='deg')
     radii_stars = stars_df['Rand. Dist'].values
 
@@ -118,13 +121,12 @@ def get_stars_at_time(obstime_str="2022-06-14 20:00:00.100"):
     stars_xyz = pd.DataFrame.from_dict(star_dict).set_index('Star Name')
     return stars_xyz
 
-def star_loc_at_time(star_name, obstime_str="2022-06-14 20:00:00.100",):
+def star_loc_at_time(star_name, obstime_str="2023-06-14T12:00:00.000000",):
     stars_xyz = get_stars_at_time(obstime_str)
     star = stars_xyz[stars_xyz.index==star_name]
     return star
 
-
-def delays_for_time_star(star_name, obstime_str="2022-06-14 20:00:00.100"):
+def delays_for_time_star(star_name, obstime_str="2023-06-14T12:00:00.000000"):
     """ For a given time, and given Star return detector delays
     """
     # at time = t get xyz of detectors and single star
@@ -133,19 +135,62 @@ def delays_for_time_star(star_name, obstime_str="2022-06-14 20:00:00.100"):
 
     title = f'{obstime_str} SN neutrino arrival delay [s]'
     star_xyz = star_df.loc[star_name, ['x (m)', 'y (m)', 'z (m)']]
-    delays_dict = {}
+    # delays_dict = {}
+    timeslist = []
+    delayslist = []
     for detector in detectors_df.index:
         detector_xyz = detectors_df.loc[detector, ['x (m)', 'y (m)', 'z (m)']]
         distance = np.linalg.norm(star_xyz - detector_xyz)  # meters
-        delays_dict[detector] = distance / 2.9979e8  # dist/light speed = seconds
+        delays_sec = distance / 2.9979e8  # dist/light speed = seconds
 
-    delays_df = pd.DataFrame.from_dict([delays_dict]).T
-    nametag = star_name
-    delays_df.rename({0: nametag}, axis=1, inplace=True)
-    delays_df.sort_values(nametag, inplace=True)
-    minval = min(delays_df[nametag])
-    delays_df[nametag] = delays_df[nametag].map(lambda nametag: nametag - minval)
+        date_obj = datetime.strptime(obstime_str, isoformat) + timedelta(seconds=delays_sec)
+        timeslist.append(datetime.strftime(date_obj, isoformat))
+        delayslist.append(distance / 2.9979e8)
+        # delays_dict[detector] = distance / 2.9979e8  # dist/light speed = seconds
+
+    minval = min(np.array(delayslist))
+    delays = np.array(delayslist)-minval
+    sortedargs = np.argsort(delays)
+    delays_arr = delays[sortedargs]
+    timeslist = np.array(timeslist)
+    times_arr = timeslist[sortedargs]
+    detectors_arr = detectors_df.index[sortedargs]
+    delays_df = pd.DataFrame({'delays':delays_arr, 'times':times_arr}, index=detectors_arr,)
+    # delays_df = pd.DataFrame.from_dict([delays_dict]).T
+    # nametag = star_name
+    # delays_df.rename({0: nametag}, axis=1, inplace=True)
+    # delays_df.sort_values(nametag, inplace=True)
+    # minval = min(delays_df[nametag])
+    # delays_df[nametag] = delays_df[nametag].map(lambda nametag: nametag - minval)
     return delays_df
+
+
+# def delays_for_time_star(star_name, obstime_str="2023-06-14T12:00:00.000000"):
+#     """ For a given time, and given Star return detector delays
+#     """
+#     # at time = t get xyz of detectors and single star
+#     star_df = star_loc_at_time(star_name, obstime_str)
+#     detectors_df = get_detectors_at_time(obstime_str=obstime_str)
+#
+#     title = f'{obstime_str} SN neutrino arrival delay [s]'
+#     star_xyz = star_df.loc[star_name, ['x (m)', 'y (m)', 'z (m)']]
+#     delays_dict = {}
+#     for detector in detectors_df.index:
+#         detector_xyz = detectors_df.loc[detector, ['x (m)', 'y (m)', 'z (m)']]
+#         distance = np.linalg.norm(star_xyz - detector_xyz)  # meters
+#         delays_sec = distance / 2.9979e8  # dist/light speed = seconds
+#
+#         date_obj = datetime.strptime(obstime_str, isoformat) + timedelta(seconds=delays_sec)
+#         delays_dict[detector] = datetime.strftime(date_obj, isoformat)
+#         # delays_dict[detector] = distance / 2.9979e8  # dist/light speed = seconds
+#
+#     delays_df = pd.DataFrame.from_dict([delays_dict]).T
+#     nametag = star_name
+#     delays_df.rename({0: nametag}, axis=1, inplace=True)
+#     delays_df.sort_values(nametag, inplace=True)
+#     minval = min(delays_df[nametag])
+#     # delays_df[nametag] = delays_df[nametag].map(lambda nametag: nametag - minval)
+#     return delays_df
 
 
 ####### Make dash app
@@ -226,11 +271,23 @@ def plot_spheres(obstime, candid_name=None):
                                      mode='markers', hoverinfo='text',
                                      marker=dict(size=35, color='yellow', opacity=0.4),
                                      text=f"{candid_name} <br>{radec}<br> EXPLODED!")]
-        data = lines + data + modified_part
+        lines_to_detectors = []
+        detectors = get_detectors_at_time(obstime_str=obstime)
+        x_star = candid['x (m)']
+        y_star = candid['y (m)']
+        z_star = candid['z (m)']
+        for detector in detectors.index:
+            det = detectors.loc[detector]
+            xs = np.array([x_star, det['x (m)']])
+            ys = np.array([y_star, det['y (m)']])
+            zs = np.array([z_star, det['z (m)']])
+            lines_to_detectors.append(go.Scatter3d(x=xs, y=ys,z=zs, mode='lines'))
+        data = lines + data + modified_part + lines_to_detectors
     fig = go.Figure(data=data, layout=layout)
     return fig
 
 def generate_table(dataframe, max_rows=20):
+    ## convert df to iso time formatted
     return html.Table([
         html.Thead(
             html.Tr([html.Th(col) for col in dataframe.columns])
@@ -262,13 +319,13 @@ app.layout = html.Div([
     html.Div(
         children=[
             html.H1("Supernova Arrival Time Delays", style={'text-align': 'center', 'color':'white'}),
+            dcc.Markdown(children=explanation_text, style={'color':'white', 'font_size': '6px'}),
             dcc.Dropdown(id="candid_selected", options=kv_pairs, multi=False, value=123,
                          placeholder="Select a Star to Explode", style={'width': "90%"}),
-            dcc.DatePickerSingle(id='my-date-picker-single', min_date_allowed=date(2022, 4, 14),
-                                 max_date_allowed=date(2030, 12, 12), initial_visible_month=date(2022, 6, 14),
-                                 date=date(2022, 6, 14)),
+            dcc.DatePickerSingle(id='my-date-picker-single', min_date_allowed=date(2022, 1, 1),
+                                 max_date_allowed=date(2030, 12, 12), initial_visible_month=date(2023, 6, 14),
+                                 date=date(2023, 6, 14)),
             html.Div(id='output-container-date-picker-single'),
-            dcc.Markdown(children=explanation_text, style={'color':'white', 'font_size': '6px'}),
         ],
         style={'display': 'inline-block', 'width': "30%", 'vertical-align': 'top', 'margin-left': '3vw',
                'margin-top': '3vw'}
@@ -301,12 +358,13 @@ app.layout = html.Div([
 )
 def update_graph(obstime, candid_selected):
     star_name = vk_pairs[candid_selected]
-    print(candid_selected, star_name)
+    # print(candid_selected, star_name)
     if obstime is not None:
         date_object = date.fromisoformat(obstime)
-        date_string = date_object.strftime('%Y-%m-%d')+" 20:00:00.100"
+        date_string = date_object.strftime('%Y-%m-%d')+" 12:00:00.000000"
+        date_string = datetime.strptime(date_string, "%Y-%m-%d %H:%M:%S.%f").strftime(isoformat)
     else:
-        date_string = "2022-06-14 20:00:00.100"
+        date_string = "2023-06-14T12:00:00.000000"
 
     selected_df = delays_for_time_star(star_name, obstime_str=date_string)
     fig = plot_spheres(obstime, candid_name=star_name)
