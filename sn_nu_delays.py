@@ -135,63 +135,27 @@ def delays_for_time_star(star_name, obstime_str="2023-06-14T12:00:00.000000"):
 
     title = f'{obstime_str} SN neutrino arrival delay [s]'
     star_xyz = star_df.loc[star_name, ['x (m)', 'y (m)', 'z (m)']]
-    # delays_dict = {}
-    timeslist = []
     delayslist = []
     for detector in detectors_df.index:
         detector_xyz = detectors_df.loc[detector, ['x (m)', 'y (m)', 'z (m)']]
         distance = np.linalg.norm(star_xyz - detector_xyz)  # meters
-        delays_sec = distance / 2.9979e8  # dist/light speed = seconds
-
-        date_obj = datetime.strptime(obstime_str, isoformat) + timedelta(seconds=delays_sec)
-        timeslist.append(datetime.strftime(date_obj, isoformat))
         delayslist.append(distance / 2.9979e8)
-        # delays_dict[detector] = distance / 2.9979e8  # dist/light speed = seconds
 
     minval = min(np.array(delayslist))
-    delays = np.array(delayslist)-minval
+    delays = np.array(delayslist) - minval
+
+    timeslist = []
+    for detector, delays_sec in zip(detectors_df.index, delays):
+        date_obj = datetime.strptime(obstime_str, isoformat) + timedelta(seconds=delays_sec)
+        timeslist.append(datetime.strftime(date_obj, isoformat))
+
     sortedargs = np.argsort(delays)
     delays_arr = delays[sortedargs]
     timeslist = np.array(timeslist)
     times_arr = timeslist[sortedargs]
     detectors_arr = detectors_df.index[sortedargs]
     delays_df = pd.DataFrame({'delays':delays_arr, 'times':times_arr}, index=detectors_arr,)
-    # delays_df = pd.DataFrame.from_dict([delays_dict]).T
-    # nametag = star_name
-    # delays_df.rename({0: nametag}, axis=1, inplace=True)
-    # delays_df.sort_values(nametag, inplace=True)
-    # minval = min(delays_df[nametag])
-    # delays_df[nametag] = delays_df[nametag].map(lambda nametag: nametag - minval)
     return delays_df
-
-
-# def delays_for_time_star(star_name, obstime_str="2023-06-14T12:00:00.000000"):
-#     """ For a given time, and given Star return detector delays
-#     """
-#     # at time = t get xyz of detectors and single star
-#     star_df = star_loc_at_time(star_name, obstime_str)
-#     detectors_df = get_detectors_at_time(obstime_str=obstime_str)
-#
-#     title = f'{obstime_str} SN neutrino arrival delay [s]'
-#     star_xyz = star_df.loc[star_name, ['x (m)', 'y (m)', 'z (m)']]
-#     delays_dict = {}
-#     for detector in detectors_df.index:
-#         detector_xyz = detectors_df.loc[detector, ['x (m)', 'y (m)', 'z (m)']]
-#         distance = np.linalg.norm(star_xyz - detector_xyz)  # meters
-#         delays_sec = distance / 2.9979e8  # dist/light speed = seconds
-#
-#         date_obj = datetime.strptime(obstime_str, isoformat) + timedelta(seconds=delays_sec)
-#         delays_dict[detector] = datetime.strftime(date_obj, isoformat)
-#         # delays_dict[detector] = distance / 2.9979e8  # dist/light speed = seconds
-#
-#     delays_df = pd.DataFrame.from_dict([delays_dict]).T
-#     nametag = star_name
-#     delays_df.rename({0: nametag}, axis=1, inplace=True)
-#     delays_df.sort_values(nametag, inplace=True)
-#     minval = min(delays_df[nametag])
-#     # delays_df[nametag] = delays_df[nametag].map(lambda nametag: nametag - minval)
-#     return delays_df
-
 
 ####### Make dash app
 
