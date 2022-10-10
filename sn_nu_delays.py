@@ -235,9 +235,9 @@ layout = go.Layout(
             backgroundcolor='rgb(0,0,0,0)',
             visible=False
         ),
-        camera=dict(eye=dict(x=1.15, y=1.15, z=1.15))
+        # camera=dict(eye=dict(x=1.15, y=1.15, z=1.15))
     ),
-
+    uirevision=None,
 )
 
 detector_text =[name + f"<br>lon: {detectors_df.loc[name, 'Longitude (deg)']:.2f}deg<br>lat: " \
@@ -248,10 +248,10 @@ star_text = [name +
              f"<br>RA:{ra:.2f}" +
              f"<br>DEC:{dec:.2f}" for name, ra, dec in zip(stars_df['Star Name'], stars_df['RA'], stars_df['DEC'])]
 
-def get_scatter_data(obstime):
+def get_scatter_data(obstime, detectors=[]):
     """ for a given time, get all the scatter data
     """
-    detectors = get_detectors_at_time(obstime_str=obstime)
+    # detectors = get_detectors_at_time(obstime_str=obstime)
     stars = get_stars_at_time(obstime_str=obstime)
 
     det_scat =[go.Scatter3d(x=detectors['x (m)'], y=detectors['y (m)'], z=detectors['z (m)'],
@@ -261,8 +261,10 @@ def get_scatter_data(obstime):
     return star_scat + det_scat
 
 
-def plot_spheres(obstime, candid_name=None):
-    data = get_scatter_data(obstime)
+def plot_spheres(obstime, candid_name=None, detectors=[]):
+    _detectors = get_detectors_at_time(obstime_str=obstime)
+    detectors_selected = _detectors[_detectors.index.isin(detectors)]
+    data = get_scatter_data(obstime, detectors_selected)
     if candid_name is not None:
         stars = get_stars_at_time(obstime_str=obstime)
         candid = stars.loc[candid_name]
@@ -272,16 +274,15 @@ def plot_spheres(obstime, candid_name=None):
                                      marker=dict(size=35, color='yellow', opacity=0.4),
                                      text=f"{candid_name} <br>{radec}<br> EXPLODED!")]
         lines_to_detectors = []
-        detectors = get_detectors_at_time(obstime_str=obstime)
         x_star = candid['x (m)']
         y_star = candid['y (m)']
         z_star = candid['z (m)']
-        for detector in detectors.index:
-            det = detectors.loc[detector]
+        for detector in detectors_selected.index:
+            det = detectors_selected.loc[detector]
             xs = np.array([x_star, det['x (m)']])
             ys = np.array([y_star, det['y (m)']])
             zs = np.array([z_star, det['z (m)']])
-            lines_to_detectors.append(go.Scatter3d(x=xs, y=ys,z=zs, mode='lines'))
+            lines_to_detectors.append(go.Scatter3d(x=xs, y=ys,z=zs, mode='lines', line = dict(color="cyan")))
         data = lines + data + modified_part + lines_to_detectors
     fig = go.Figure(data=data, layout=layout)
     return fig
@@ -322,6 +323,8 @@ app.layout = html.Div([
             dcc.Markdown(children=explanation_text, style={'color':'white', 'font_size': '6px'}),
             dcc.Dropdown(id="candid_selected", options=kv_pairs, multi=False, value=123,
                          placeholder="Select a Star to Explode", style={'width': "90%"}),
+            dcc.Checklist(id="Detectors", options=detectors_df.index, value=detectors_df.index,
+                          style={'color':'white', 'font_size': '10px'}, inline=True),
             dcc.DatePickerSingle(id='my-date-picker-single', min_date_allowed=date(2022, 1, 1),
                                  max_date_allowed=date(2030, 12, 12), initial_visible_month=date(2023, 6, 14),
                                  date=date(2023, 6, 14)),
@@ -354,9 +357,10 @@ app.layout = html.Div([
      Output(component_id='my_3dscat', component_property='figure'),
      Output(component_id='output-container-date-picker-single', component_property='children')],
     [Input(component_id='my-date-picker-single', component_property='date'),
-     Input(component_id='candid_selected', component_property='value')]
+     Input(component_id='candid_selected', component_property='value'),
+     Input(component_id='Detectors', component_property='value')]
 )
-def update_graph(obstime, candid_selected):
+def update_graph(obstime, candid_selected, Detectors):
     star_name = vk_pairs[candid_selected]
     # print(candid_selected, star_name)
     if obstime is not None:
@@ -367,10 +371,12 @@ def update_graph(obstime, candid_selected):
         date_string = "2023-06-14T12:00:00.000000"
 
     selected_df = delays_for_time_star(star_name, obstime_str=date_string)
-    fig = plot_spheres(obstime, candid_name=star_name)
+    fig = plot_spheres(obstime, candid_name=star_name, detectors=Detectors)
     selected_df['Detectors'] = selected_df.index
     selected_df = selected_df[selected_df.columns.tolist()[::-1]]
-    return generate_table(selected_df), fig, date_string
+    test_df = selected_df.copy()
+    test_df = test_df[selected_df["Detectors"].isin(Detectors)]
+    return generate_table(test_df), fig, date_string
 
 
 # ------------------------------------------------------------------------------
