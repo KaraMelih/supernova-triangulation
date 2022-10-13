@@ -293,7 +293,7 @@ app.layout = html.Div([
             dcc.Markdown(children=explanation_text, style={'color':'white', 'font_size': '6px'}),
             dcc.Dropdown(id="candid_selected", options=kv_pairs, multi=False, value=123,
                          placeholder="Select a Star to Explode", style={'width': "90%"}),
-            dcc.Checklist(id="Detectors", options=detectors_df.index, value=detectors_df.index,
+            dcc.Checklist(id="Detectors", options=detectors_df.index, value=['SK', 'IC', 'KL', 'XENONnT'],
                           style={'color':'white', 'font_size': '10px'}, inline=True),
             dcc.DatePickerSingle(id='my-date-picker-single', min_date_allowed=date(2022, 1, 1),
                                  max_date_allowed=date(2030, 12, 12), initial_visible_month=date(2023, 6, 14),
