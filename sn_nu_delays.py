@@ -9,6 +9,7 @@ from datetime import date, datetime, timedelta
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
+from format_json import get_json_data
 
 from dash import Dash, dcc, html, Input, Output
 
@@ -63,9 +64,12 @@ def get_xyz_from_gcrs(gcrs_coor, radius=10, scale_rad=1):
     radius = (radius * u.kpc).to(u.m).value * scale_rad
     delta = gcrs_coor.dec.rad
     phi = gcrs_coor.ra.rad
-    SNx = -np.cos(phi) * np.cos(delta)
-    SNy = -np.sin(phi) * np.cos(delta)
-    SNz = -np.sin(delta)
+    # SNx = -np.cos(phi) * np.cos(delta)
+    # SNy = -np.sin(phi) * np.cos(delta)
+    # SNz = -np.sin(delta)
+    SNx = np.cos(phi) * np.cos(delta)
+    SNy = np.sin(phi) * np.cos(delta)
+    SNz = np.sin(delta)
     return radius * np.array([SNx, SNy, SNz])
 
 #------------------------------------------------ load assets ----------------------------------------------------------
@@ -87,31 +91,38 @@ for _name in candid_names:
 _stars = np.column_stack((star_names_list, stars_radec_list, star_random_radii*Earthradkpc))
 stars_df = pd.DataFrame(_stars, columns=('Star Name', 'RA', 'DEC', 'Rand. Dist'))
 stars_df = stars_df.astype({"RA": float, "DEC": float, 'Rand. Dist':float})
+stars_df.set_index('Star Name', inplace=True)
+
+# to be displayed on hover, fixed
+star_text = [name +
+             f"<br>RA:{ra:.2f}" +
+             f"<br>DEC:{dec:.2f}" for name, ra, dec in zip(stars_df.index, stars_df['RA'], stars_df['DEC'])]
 #-----------------------------------------------------------------------------------------------------------------------
 
 def get_detectors_at_time(obstime_str="2023-06-14T12:00:00.000000", detectors=detectors_df):
-    # obstime = Time(obstime_str, format='iso', scale='utc')
     obstime = Time(obstime_str, format='isot', scale='utc')
     df_new = detectors.copy()
     df_new['ObsTime'] = np.repeat(obstime, len(detectors))
     df_new['x (m)'], df_new['y (m)'], df_new['z (m)'] = 0, 0, 0
-    # xyz_detectors = np.zeros((len(detectors),3))
+    # xyz_detectors = np.zeros((len(selected_detectors),3))
     for i, name in enumerate(detectors.index):
         det = detectors.loc[name]
         detobj = Detector(name=name, lon=det['Longitude (deg)'], lat=det['Latitude (deg)'],
                           height=det['Height (m)'], sigma=det['Time Uncertainty (s)'],
                           bias=det['Bias (s)'])
         df_new.loc[name, 'x (m)'], df_new.loc[name, 'y (m)'], df_new.loc[name, 'z (m)'] = detobj.get_xyz(obstime).value
+        df_new.loc[name, 'RA (deg)'] = detobj.get_gcrs(obstime).ra.value
+        df_new.loc[name, 'DEC (deg)'] = detobj.get_gcrs(obstime).dec.value
+        df_new.loc[name, 'r (m)'] = detobj.get_gcrs(obstime).distance.value
     return df_new
 
 def get_stars_at_time(obstime_str="2023-06-14T12:00:00.000000"):
-    # obstime = Time(obstime_str, format='iso', scale='utc')
     obstime = Time(obstime_str, format='isot', scale='utc')
     skycoors = SkyCoord(stars_df['RA'], stars_df['DEC'], frame="fk5", obstime=obstime, unit='deg')
     radii_stars = stars_df['Rand. Dist'].values
 
     star_xyz = get_xyz_from_gcrs(skycoors.gcrs, radius=radii_stars)
-    star_dict = {'Star Name': stars_df['Star Name'],
+    star_dict = {'Star Name': stars_df.index,
                  'RA (deg)': stars_df['RA'],
                  'DEC (deg)': stars_df['DEC'],
                  'x (m)': star_xyz[0],
@@ -125,37 +136,6 @@ def star_loc_at_time(star_name, obstime_str="2023-06-14T12:00:00.000000",):
     stars_xyz = get_stars_at_time(obstime_str)
     star = stars_xyz[stars_xyz.index==star_name]
     return star
-
-def delays_for_time_star(star_name, obstime_str="2023-06-14T12:00:00.000000"):
-    """ For a given time, and given Star return detector delays
-    """
-    # at time = t get xyz of detectors and single star
-    star_df = star_loc_at_time(star_name, obstime_str)
-    detectors_df = get_detectors_at_time(obstime_str=obstime_str)
-
-    title = f'{obstime_str} SN neutrino arrival delay [s]'
-    star_xyz = star_df.loc[star_name, ['x (m)', 'y (m)', 'z (m)']]
-    delayslist = []
-    for detector in detectors_df.index:
-        detector_xyz = detectors_df.loc[detector, ['x (m)', 'y (m)', 'z (m)']]
-        distance = np.linalg.norm(star_xyz - detector_xyz)  # meters
-        delayslist.append(distance / 2.9979e8)
-
-    minval = min(np.array(delayslist))
-    delays = np.array(delayslist) - minval
-
-    timeslist = []
-    for detector, delays_sec in zip(detectors_df.index, delays):
-        date_obj = datetime.strptime(obstime_str, isoformat) + timedelta(seconds=delays_sec)
-        timeslist.append(datetime.strftime(date_obj, isoformat))
-
-    sortedargs = np.argsort(delays)
-    delays_arr = delays[sortedargs]
-    timeslist = np.array(timeslist)
-    times_arr = timeslist[sortedargs]
-    detectors_arr = detectors_df.index[sortedargs]
-    delays_df = pd.DataFrame({'delays':delays_arr, 'times':times_arr}, index=detectors_arr,)
-    return delays_df
 
 ####### Make dash app
 
@@ -204,19 +184,36 @@ layout = go.Layout(
     uirevision=None,
 )
 
-detector_text =[name + f"<br>lon: {detectors_df.loc[name, 'Longitude (deg)']:.2f}deg<br>lat: " \
-                       f"{detectors_df.loc[name, 'Latitude (deg)']:.2f}deg<br>" \
-                       f"Height{detectors_df.loc[name, 'Height (m)']:.2f}m" for name in detectors_df.index]
 
-star_text = [name +
-             f"<br>RA:{ra:.2f}" +
-             f"<br>DEC:{dec:.2f}" for name, ra, dec in zip(stars_df['Star Name'], stars_df['RA'], stars_df['DEC'])]
+def scatter_selected_star(detectors, stars, exploding):
+    candid = stars.loc[exploding]
+    radec = f"RA:{candid['RA (deg)']}, DEC:{candid['DEC (deg)']}"
+    modified_part =[ go.Scatter3d(x=[candid['x (m)']], y=[candid['y (m)']], z=[candid['z (m)']],
+                                  mode='markers', hoverinfo='text',
+                                  marker=dict(size=35, color='yellow', opacity=0.4),
+                                  text=f"{exploding} <br>{radec}<br> EXPLODED!")]
+    lines_to_detectors = []
+    x_star = candid['x (m)']
+    y_star = candid['y (m)']
+    z_star = candid['z (m)']
+    for detector in detectors.index:
+        det = detectors.loc[detector]
+        xs = np.array([x_star, det['x (m)']])
+        ys = np.array([y_star, det['y (m)']])
+        zs = np.array([z_star, det['z (m)']])
+        lines_to_detectors.append(go.Scatter3d(x=xs, y=ys,z=zs, mode='lines', line = dict(color="cyan")))
 
-def get_scatter_data(obstime, detectors=[]):
-    """ for a given time, get all the scatter data
-    """
-    # detectors = get_detectors_at_time(obstime_str=obstime)
-    stars = get_stars_at_time(obstime_str=obstime)
+    return lines_to_detectors + modified_part
+
+def get_scatter_data(detectors, stars):
+    detector_text = [name +
+                      f"<br>lon: {detectors.loc[name, 'Longitude (deg)']:.2f}deg<br>" \
+                      f"lat: {detectors.loc[name, 'Latitude (deg)']:.2f}deg<br>" \
+                      f"Height{detectors.loc[name, 'Height (m)']:.2f}m<br>" \
+                      f"RA: {detectors.loc[name, 'RA (deg)']:.2f}deg<br>" \
+                      f"DEC: {detectors.loc[name, 'DEC (deg)']:.2f}deg<br>" \
+                      f"r: {detectors.loc[name, 'r (m)']:.3f}m"
+                      for name in detectors.index]
 
     det_scat =[go.Scatter3d(x=detectors['x (m)'], y=detectors['y (m)'], z=detectors['z (m)'],
                             marker=dict(size=7, symbol='x'), text=detector_text, hoverinfo='text', mode ='markers')]
@@ -224,32 +221,41 @@ def get_scatter_data(obstime, detectors=[]):
                               hoverinfo='text', text=star_text, marker=dict(size=5, color='white'))]
     return star_scat + det_scat
 
-
-def plot_spheres(obstime, candid_name=None, detectors=[]):
-    _detectors = get_detectors_at_time(obstime_str=obstime)
-    detectors_selected = _detectors[_detectors.index.isin(detectors)]
-    data = get_scatter_data(obstime, detectors_selected)
-    if candid_name is not None:
-        stars = get_stars_at_time(obstime_str=obstime)
-        candid = stars.loc[candid_name]
-        radec = f"RA:{candid['RA (deg)']}, DEC:{candid['DEC (deg)']}"
-        modified_part =[go.Scatter3d(x=[candid['x (m)']], y=[candid['y (m)']], z=[candid['z (m)']],
-                                     mode='markers', hoverinfo='text',
-                                     marker=dict(size=35, color='yellow', opacity=0.4),
-                                     text=f"{candid_name} <br>{radec}<br> EXPLODED!")]
-        lines_to_detectors = []
-        x_star = candid['x (m)']
-        y_star = candid['y (m)']
-        z_star = candid['z (m)']
-        for detector in detectors_selected.index:
-            det = detectors_selected.loc[detector]
-            xs = np.array([x_star, det['x (m)']])
-            ys = np.array([y_star, det['y (m)']])
-            zs = np.array([z_star, det['z (m)']])
-            lines_to_detectors.append(go.Scatter3d(x=xs, y=ys,z=zs, mode='lines', line = dict(color="cyan")))
-        data = lines + data + modified_part + lines_to_detectors
+def plot_spheres(detectors, stars, exploding):
+    globe = lines
+    stars_and_detectors = get_scatter_data(detectors, stars)
+    exploding_star = scatter_selected_star(detectors, stars, exploding)
+    data = globe + stars_and_detectors + exploding_star
     fig = go.Figure(data=data, layout=layout)
     return fig
+
+
+def delays_for_time_star(star_xyz, detectors_df, obstime_str="2023-06-14T12:00:00.000000"):
+    """ For a given time, and given Star return detector delays
+    """
+    delayslist = []
+    for detector in detectors_df.index:
+        detector_xyz = detectors_df.loc[detector, ['x (m)', 'y (m)', 'z (m)']]
+        distance = np.linalg.norm(star_xyz - detector_xyz)  # meters
+        delayslist.append(distance / 2.9979e8)
+
+    minval = min(np.array(delayslist))
+    delays = np.array(delayslist) - minval
+
+    timeslist = []
+    for detector, delays_sec in zip(detectors_df.index, delays):
+        date_obj = datetime.strptime(obstime_str, isoformat) + timedelta(seconds=delays_sec)
+        timeslist.append(datetime.strftime(date_obj, isoformat))
+    timeslist = np.array(timeslist)
+
+    sortedargs = np.argsort(delays)
+    delays_arr = delays[sortedargs]
+    times_arr = timeslist[sortedargs]
+    detectors_arr = detectors_df.index[sortedargs]
+    delays_df = pd.DataFrame({'Detectors':detectors_arr, 'delays':np.round(delays_arr,6), 'times':times_arr}, index=detectors_arr,)
+    delays_df = delays_df[delays_df.columns.tolist()[::-1]]
+    return delays_df
+
 
 def generate_table(dataframe, max_rows=20):
     ## convert df to iso time formatted
@@ -274,7 +280,7 @@ external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
 app = Dash(__name__, external_stylesheets=external_stylesheets)
 server = app.server
 
-explanation_text =  f"\n\nThe app calculates the relative time delays between detectors \n" \
+explanation_text =  f"\n\nThe app calculates the relative time delays between selected_detectors \n" \
                     f"Therefore, the radial distance of a candidate star is randomly distributed \n" \
                     f"The plane wave from a star is brought to earth surface, and all delays are referenced\n" \
                     f"from the first detector interaction.\n" \
@@ -293,7 +299,13 @@ app.layout = html.Div([
                                  max_date_allowed=date(2030, 12, 12), initial_visible_month=date(2023, 6, 14),
                                  date=date(2023, 6, 14)),
             html.Div(id='output-container-date-picker-single'),
-        ],
+            # download button
+            html.A('Download Data',
+                    id='download-link',
+                    download="rawdata.json",
+                    href="",
+                    target="_blank", style={'font_size': '15px'}),
+            ],
         style={'display': 'inline-block', 'width': "30%", 'vertical-align': 'top', 'margin-left': '3vw',
                'margin-top': '3vw'}
     ),
@@ -306,27 +318,23 @@ app.layout = html.Div([
         style={'display': 'inline-block', 'vertical-align': 'top', 'margin-left': '3vw', 'margin-top': '3vw'}
     ),
     html.Br(),
-    html.Div(children=[
-        dcc.Graph(id='my_3dscat', figure={})
-    ],
-        style={'display': 'inline-block', 'vertical-align': 'top', 'margin-left': '3vw', 'margin-top': '3vw'}),
-],
+    html.Div(children=[dcc.Graph(id='my_3dscat', figure={}),],
+            style={'display': 'inline-block', 'vertical-align': 'top', 'margin-left': '3vw', 'margin-top': '3vw'}),],
     style={'display': 'flex', 'backgroundColor': 'black'})
 
 
 # ------------------------------------------------------------------------------
 # Connect the Plotly graphs with Dash Components
+
 @app.callback(
-    [Output(component_id='delay_df', component_property='children'),
-     Output(component_id='my_3dscat', component_property='figure'),
-     Output(component_id='output-container-date-picker-single', component_property='children')],
+    [Output(component_id='my_3dscat', component_property='figure'),
+     Output(component_id='delay_df', component_property='children'),
+     Output('download-link', 'href'),],
     [Input(component_id='my-date-picker-single', component_property='date'),
-     Input(component_id='candid_selected', component_property='value'),
-     Input(component_id='Detectors', component_property='value')]
-)
-def update_graph(obstime, candid_selected, Detectors):
-    star_name = vk_pairs[candid_selected]
-    # print(candid_selected, star_name)
+     Input(component_id='Detectors', component_property='value'),
+     Input(component_id='candid_selected', component_property='value'),])
+def update_positions(obstime, selected_detectors, candid_selected):
+    candid_name = vk_pairs[candid_selected]
     if obstime is not None:
         date_object = date.fromisoformat(obstime)
         date_string = date_object.strftime('%Y-%m-%d')+" 12:00:00.000000"
@@ -334,13 +342,16 @@ def update_graph(obstime, candid_selected, Detectors):
     else:
         date_string = "2023-06-14T12:00:00.000000"
 
-    selected_df = delays_for_time_star(star_name, obstime_str=date_string)
-    fig = plot_spheres(obstime, candid_name=star_name, detectors=Detectors)
-    selected_df['Detectors'] = selected_df.index
-    selected_df = selected_df[selected_df.columns.tolist()[::-1]]
-    test_df = selected_df.copy()
-    test_df = test_df[selected_df["Detectors"].isin(Detectors)]
-    return generate_table(test_df), fig, date_string
+    detector_pos = get_detectors_at_time(date_string)
+    detectors_selected = detector_pos[detector_pos.index.isin(selected_detectors)]
+    star_pos = get_stars_at_time(date_string)
+    fig = plot_spheres(detectors_selected, star_pos, candid_name)
+    # delay df
+    star_xyz = star_pos.loc[candid_name, ['x (m)', 'y (m)', 'z (m)']]
+    delay_df = delays_for_time_star(star_xyz, detectors_selected, obstime_str=date_string)
+
+    href = get_json_data(date_string, detectors_selected, delay_df)
+    return fig, generate_table(delay_df), href
 
 
 # ------------------------------------------------------------------------------
