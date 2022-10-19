@@ -21,3 +21,24 @@ def get_json_data(date_string, detectors_selected, delay_df):
     data_string = json.dumps(message)
     href = f"data:text/json;charset=utf-8,{data_string}"
     return href
+
+
+base_detector_msg = {
+    "detector_name":
+        "detector name",
+    "neutrino_time":
+        "2022-09-28T01:23:45:059496",
+    "testing":
+        "this is a test"
+}
+
+def get_json_per_detector(date_string, detectors_selected, delay_df):
+    master_dict = {}
+    for detector, delay in zip(detectors_selected.index, delay_df['times']):
+        message = base_detector_msg.copy()
+        message["neutrino_time"] = delay
+        message["detector_name"] = detector
+        master_dict[detector] = message
+    data_string = json.dumps(master_dict)
+    href = f"data:text/json;charset=utf-8,{data_string}"
+    return href
