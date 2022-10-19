@@ -9,7 +9,7 @@ from datetime import date, datetime, timedelta
 import numpy as np
 import pandas as pd
 import plotly.graph_objs as go
-from format_json import get_json_data
+from format_json import get_json_data, get_json_per_detector
 
 from dash import Dash, dcc, html, Input, Output
 
@@ -286,6 +286,8 @@ explanation_text =  f"\n\nThe app calculates the relative time delays between se
                     f"from the first detector interaction.\n" \
                     "see the code at [GitHub](https://github.com/KaraMelih/supernova-triangulation)"
 
+
+
 app.layout = html.Div([
     html.Div(
         children=[
@@ -304,6 +306,12 @@ app.layout = html.Div([
                     id='download-link',
                     download="rawdata.json",
                     href="",
+                    target="_blank", style={'font_size': '17px'}),
+            html.Br(),
+            html.A('Download Detector Messages',
+                    id='download-link-det',
+                    download="detector_delays.json",
+                    href="",
                     target="_blank", style={'font_size': '15px'}),
             ],
         style={'display': 'inline-block', 'width': "30%", 'vertical-align': 'top', 'margin-left': '3vw',
@@ -321,15 +329,14 @@ app.layout = html.Div([
     html.Div(children=[dcc.Graph(id='my_3dscat', figure={}),],
             style={'display': 'inline-block', 'vertical-align': 'top', 'margin-left': '3vw', 'margin-top': '3vw'}),],
     style={'display': 'flex', 'backgroundColor': 'black'})
-
-
 # ------------------------------------------------------------------------------
 # Connect the Plotly graphs with Dash Components
 
 @app.callback(
     [Output(component_id='my_3dscat', component_property='figure'),
      Output(component_id='delay_df', component_property='children'),
-     Output('download-link', 'href'),],
+     Output('download-link', 'href'),
+     Output('download-link-det', 'href'),],
     [Input(component_id='my-date-picker-single', component_property='date'),
      Input(component_id='Detectors', component_property='value'),
      Input(component_id='candid_selected', component_property='value'),])
@@ -351,7 +358,8 @@ def update_positions(obstime, selected_detectors, candid_selected):
     delay_df = delays_for_time_star(star_xyz, detectors_selected, obstime_str=date_string)
 
     href = get_json_data(date_string, detectors_selected, delay_df)
-    return fig, generate_table(delay_df), href
+    href_detectors = get_json_per_detector(date_string, detectors_selected, delay_df)
+    return fig, generate_table(delay_df), href, href_detectors
 
 
 # ------------------------------------------------------------------------------
