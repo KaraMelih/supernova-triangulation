@@ -357,8 +357,8 @@ def update_positions(obstime, selected_detectors, candid_selected):
     star_xyz = star_pos.loc[candid_name, ['x (m)', 'y (m)', 'z (m)']]
     delay_df = delays_for_time_star(star_xyz, detectors_selected, obstime_str=date_string)
 
-    href = get_json_data(date_string, detectors_selected, delay_df)
-    href_detectors = get_json_per_detector(date_string, detectors_selected, delay_df)
+    href = get_json_data(date_string, delay_df)
+    href_detectors = get_json_per_detector(delay_df)
     return fig, generate_table(delay_df), href, href_detectors
 
 
