@@ -1,5 +1,10 @@
 
+# Supernova reverse-triangulation app
 
+This app calculates the expected time delays between different delays with respect to the selected supernova candidate. The dash app is currently hosted at 
+http://kara.pythonanywhere.com/ 
+
+# Ignore Below
 ## some notes to self, needs to be cleaned
 
 Updated to automatically deploy at
