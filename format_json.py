@@ -1,20 +1,20 @@
 import json
+# import snews_pt
 
-base_message = { "False Alarm Prob": "13.96%",
-     "_id": "SNEWS_Coincidence_ALERT-UPDATE 2022-09-28T14:38:00.420080",
-     "detector_names": ["KM3NeT"],
-     "neutrino_times": ["2022-06-14T20:00:00.008268"],
-     "p_values": [0.1],
-     "p_values average": 0.09285714285714286,
-     "sent_time": "2022-09-28T14:38:00.420080",
-     "server_tag": "iap-nb-034",
-     "sub list number": 0}
-
+base_alert_message = {"False Alarm Prob": "0.00%",
+                      "_id": "SNEWS_Coincidence_ALERT datestring",
+                      "alert_type": "COINC_MSG",
+                      "detector_names": ["IceCube", "NOvA"],
+                      "neutrino_times": ["2030-01-01T12:30:19.678999", "2030-01-01T12:30:21.678999" ],
+                      "p_values": [0.98, 0.98],
+                      "p_values average": 0.98,
+                      "sent_time": "2023-12-12T12:42:58.225935",
+                      "server_tag": "iap-nb-034",
+                      "sub list number": 0}
 
 def get_json_data(date_string, delay_df):
-    message = base_message.copy()
-    message['_id'] = f"SNEWS_Coincidence_ALERT-UPDATE {date_string}"
-    # date_stripped = ".".join(date_string.strip('.')[:-1])[:-1]
+    message = base_alert_message.copy()
+    message['_id'] = f"SNEWS_Coincidence_ALERT {date_string}"
     message["neutrino_times"] = list(delay_df['times'])
     message["sent_time"] = date_string
     message["detector_names"] = list(delay_df.index)
@@ -23,14 +23,9 @@ def get_json_data(date_string, delay_df):
     return href
 
 
-base_detector_msg = {
-    "detector_name":
-        "detector name",
-    "neutrino_time":
-        "2022-09-28T01:23:45:059496",
-    "testing":
-        "this is a test"
-}
+base_detector_msg = {"detector_name": "detector name",
+                     "neutrino_time": "2022-09-28T01:23:45:059496",
+                     "is_test": True}
 
 def get_json_per_detector(delay_df):
     master_dict = {}
